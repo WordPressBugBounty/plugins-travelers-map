@@ -54,7 +54,8 @@ function cttm_options_page()
         <hr>
         <p><strong><?php _e('Need some help setting up this plugin?', 'travelers-map'); ?> </strong><br>
             <?php printf(__('Please check the <a href="%1$s" target="_blank">"Get Started" tutorial</a> on my blog.', 'travelers-map'), 'https://camilles-travels.com/get-started-with-travelers-map-wordpress-plugin/'); ?>
-            <br> </p>
+            <br>
+        </p>
         <hr>
 
 
@@ -94,7 +95,8 @@ function cttm_options_page()
             ?>
             <h2><?php _e('Clean database - Delete all geolocalisation data and markers', 'travelers-map'); ?></h2>
             <p><?php _e('This button cleans every geolocalisation meta-data added to your posts and every custom markers added.', 'travelers-map'); ?><br>
-                <strong><?php _e('Please understand this is irreversible.', 'travelers-map'); ?></strong><br></p>
+                <strong><?php _e('Please understand this is irreversible.', 'travelers-map'); ?></strong><br>
+            </p>
             <input type="submit" name="Delete" value="<?php _e('Delete all plugin data in database', 'travelers-map'); ?>" style="background:#e64949;border-color:#c91c1c;box-shadow: 0 1px 0 #831212;color: #fff;text-decoration: none;text-shadow: 0 -1px 1px #990b00,1px 0 1px #c50e0e,0 1px 1px #990500,-1px 0 1px #900;" class="button" onclick="return confirm('<?php _e('Are you sure you wish to delete every geolocalisation data and custom markers in your database? This action is irreversible.', 'travelers-map'); ?>');">
             <p class="description"><br><?php _e('To prevent unintentional loss of data, this is how Travelers\' Map works:', 'travelers-map'); ?> <br>
                 - <?php _e('Upon deactivation, every data (geolocalisation meta-data and settings) is kept. ', 'travelers-map'); ?> <br>
@@ -108,10 +110,41 @@ function cttm_options_page()
     </div>
 <?php
 }
+function cttm_create_new_marker($title, $content, $imagename)
+{
+	//Check if post exist by title and content, so we don't duplicate posts on re-activation of plugin
+	if (post_exists($title, $content) == 0) {
+		$cttm_marker_post = array(
+			'post_title'    => $title,
+			'post_content'  => $content,
+			'post_type'	  => "cttm-marker",
+			'post_status'   => 'publish'
+		);
+		//Insert post, return the id of the newly created post. If there is an error, return 0.
+		$cttm_post_id = wp_insert_post($cttm_marker_post);
+
+		//Check if returned id is different from 0.
+		if ($cttm_post_id != 0) {
+
+			//Set file url with $imagename
+			$cttm_file_url = plugin_dir_url(__FILE__) . 'images/' . $imagename;
+			//Download the image from specified URL and attach it to post
+			$cttm_image_id = media_sideload_image($cttm_file_url, $cttm_post_id, null, 'id');
+			//check if image was downloaded without error
+			if (!is_wp_error($cttm_image_id)) {
+				set_post_thumbnail($cttm_post_id, $cttm_image_id);
+			}else{
+                //if error with thumbnail (frequently SSL error), remove the marker.
+                 wp_delete_post($cttm_post_id, true);
+            }
+		}
+	}
+}
 
 add_action('admin_init', 'cttm_admin_init');
 function cttm_admin_init()
 {
+    cttm_create_new_marker(__('Default - Black', 'travelers-map'), 'black', 'cttm_markers-black.png');
     //Register new setting "cttm_options" in database (array).
     register_setting('cttm_options', 'cttm_options', 'cttm_validate_option');
 
@@ -143,15 +176,9 @@ function cttm_admin_init()
 }
 
 //Unused section header functions (mandatory)
-function cttm_main_section_html()
-{
-};
-function cttm_map_section_html()
-{
-};
-function cttm_popup_section_html()
-{
-};
+function cttm_main_section_html() {};
+function cttm_map_section_html() {};
+function cttm_popup_section_html() {};
 function cttm_multimarkers_section_html()
 {
     echo '<p class="description">' . __('Multimarkers settings only apply to posts with more than one marker linked to them.', 'travelers-map') . '<br></p>';
@@ -166,7 +193,7 @@ function cttm_posttypes_html()
     //get checked post types string and transform it into an array
     $posttypes = explode(',', $options["posttypes"]);
     //get all public registered post types
-    $registered_posttypes = get_post_types(['public' => true], 'objects');
+    $registered_posttypes = apply_filters('cttm_available_post_types_objects', get_post_types(['public' => true], 'objects'));
 
     //Add a checkbox for each registered post type, and check it if already checked in options.
     foreach ($registered_posttypes as $registered_posttype) {
@@ -281,7 +308,8 @@ function cttm_popupcss_html()
     echo '<hr style="margin:30px 0">';
 }
 
-function cttm_show_only_main_markers_html(){
+function cttm_show_only_main_markers_html()
+{
     $options = get_option('cttm_options');
 
     $only_main_marker = $options["only_main_marker"];
@@ -395,7 +423,7 @@ function cttm_validate_option($input)
 
         //Get all public post types, that could have been geolocalized.
         //We don't get the cttm_option post types set by the user because if one unchecked post types that already had markers, it would not delete them.
-        $public_posttypes = get_post_types(['public' => true]);
+        $public_posttypes = apply_filters('cttm_available_post_types', get_post_types(['public' => true]));
 
         //Get all posts with a marker set
         $cttm_delete_args = array(
@@ -466,7 +494,7 @@ function cttm_validate_option($input)
         $input['fullscreen_button'] = $options['fullscreen_button'];
         $input['onefinger'] = $options['onefinger'];
         $input['only_main_marker'] = $options['only_main_marker'];
-        
+
         return $input;
     }
     //If Polylang sync is clicked
@@ -627,7 +655,7 @@ function cttm_sanitize_post_types($posttypes)
 {
 
     //get all public registered post types
-    $registered_posttypes = get_post_types(['public' => true]);
+    $registered_posttypes = apply_filters('cttm_available_post_types', get_post_types(['public' => true]));
 
     //transform post_types string into array
     $posttypes = explode(',', $posttypes);

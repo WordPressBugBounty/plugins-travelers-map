@@ -60,16 +60,17 @@ add_action('init', 'cttm_create_private_markers_taxonomy');
 function cttm_create_private_markers_taxonomy()
 {
     //Get all public post types that could be geolocalized to set them the private taxonomy.
-    $public_posttypes = get_post_types(['public' => true]);
+    $public_posttypes = apply_filters('cttm_available_post_types', get_post_types(['public' => true]));
+    $tax_args = apply_filters('cttm_hasmarker_tax_args',  array(
+        'label' => __('Travelers Map Markers'),
+        'public' => false,
+        'rewrite' => false
+    ));
 
     register_taxonomy(
         'cttm-markers-tax',
         $public_posttypes,
-        array(
-            'label' => __('Travelers Map Markers'),
-            'public' => false,
-            'rewrite' => false
-        )
+        $tax_args
     );
 }
 
